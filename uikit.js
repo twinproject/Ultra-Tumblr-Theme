@@ -5424,6 +5424,1168 @@ mixin$1(UIkit);
 core(UIkit);
 boot(UIkit);
 
+function plugin(UIkit) {
+
+    if (plugin.installed) {
+        return;
+    }
+
+    var ref = UIkit.util;
+    var $ = ref.$;
+    var doc = ref.doc;
+    var extend = ref.extend;
+    var Dimensions = ref.Dimensions;
+    var getIndex = ref.getIndex;
+    var Transition = ref.Transition;
+    var active;
+
+    doc.on({
+        keydown: function (e) {
+            if (active) {
+                switch (e.keyCode) {
+                    case 37:
+                        active.show('previous');
+                        break;
+                    case 39:
+                        active.show('next');
+                        break;
+                }
+            }
+        }
+    });
+
+    UIkit.component('lightbox', {
+
+        name: 'lightbox',
+
+        props: {
+            toggle: String,
+            duration: Number,
+            inverse: Boolean
+        },
+
+        defaults: {
+            toggle: 'a',
+            duration: 400,
+            dark: false,
+            attrItem: 'uk-lightbox-item',
+            items: [],
+            index: 0
+        },
+
+        ready: function ready() {
+            var this$1 = this;
+
+
+            this.toggles = $(this.toggle, this.$el).each(function (_, el) { return this$1.items.push({
+                source: el.getAttribute('href'),
+                title: el.getAttribute('title'),
+                type: el.getAttribute('type')
+            }); });
+
+        },
+
+        events: [
+
+            {
+
+                name: 'click',
+
+                delegate: function delegate() {
+                    return ((this.toggle) + ":not(.uk-disabled)");
+                },
+
+                handler: function handler(e) {
+                    e.preventDefault();
+                    this.show(this.toggles.index(e.currentTarget));
+                }
+
+            },
+
+            {
+
+                name: 'showitem',
+
+                handler: function handler(e) {
+
+                    var item = this.getItem();
+
+                    if (item.content) {
+                        this.$update();
+                        e.stopImmediatePropagation();
+                    }
+                }
+
+            }
+
+        ],
+
+        update: {
+
+            write: function write() {
+                var this$1 = this;
+
+
+                var item = this.getItem();
+
+                if (!this.modal || !item.content) {
+                    return;
+                }
+
+                var panel = this.modal.panel,
+                    dim = {width: panel.width(), height: panel.height()},
+                    max = {
+                        width: window.innerWidth - (panel.outerWidth(true) - dim.width),
+                        height: window.innerHeight - (panel.outerHeight(true) - dim.height)
+                    },
+                    newDim = Dimensions.fit({width: item.width, height: item.height}, max);
+
+                Transition.stop(panel);
+                Transition.stop(this.modal.content);
+
+                if (this.modal.content) {
+                    this.modal.content.remove();
+                }
+
+                this.modal.content = $(item.content).css('opacity', 0).appendTo(panel);
+                panel.css(dim);
+
+                Transition.start(panel, newDim, this.duration).then(function () {
+                    Transition.start(this$1.modal.content, {opacity: 1}, 400).then(function () {
+                        panel.find('[uk-transition-hide]').show();
+                        panel.find('[uk-transition-show]').hide();
+                    });
+                });
+
+            },
+
+            events: ['resize', 'orientationchange']
+
+        },
+
+        methods: {
+
+            show: function show(index) {
+                var this$1 = this;
+
+
+                this.index = getIndex(index, this.items, this.index);
+
+                if (!this.modal) {
+                    this.modal = UIkit.modal.dialog("\n                    <button class=\"uk-modal-close-outside\" uk-transition-hide type=\"button\" uk-close></button>\n                    <span class=\"uk-position-center\" uk-transition-show uk-icon=\"icon: trash\"></span>\n                    ", {center: true});
+                    this.modal.$el.css('overflow', 'hidden').addClass('uk-modal-lightbox');
+                    this.modal.panel.css({width: 200, height: 200});
+                    this.modal.caption = $('<div class="uk-modal-caption" uk-transition-hide></div>').appendTo(this.modal.panel);
+
+                    if (this.items.length > 1) {
+                        $(("<div class=\"" + (this.dark ? 'uk-dark' : 'uk-light') + "\" uk-transition-hide>\n                            <a href=\"#\" class=\"uk-position-center-left\" uk-slidenav-previous uk-lightbox-item=\"previous\"></a>\n                            <a href=\"#\" class=\"uk-position-center-right\" uk-slidenav-next uk-lightbox-item=\"next\"></a>\n                        </div>\n                    ")).appendTo(this.modal.panel.addClass('uk-slidenav-position'));
+                    }
+
+                    this.modal.$el
+                        .on('hide', this.hide)
+                        .on('click', ("[" + (this.attrItem) + "]"), function (e) {
+                            e.preventDefault();
+                            this$1.show($(e.currentTarget).attr(this$1.attrItem));
+                        }).on('swipeRight swipeLeft', function (e) {
+                        e.preventDefault();
+                        if (!window.getSelection().toString()) {
+                            this$1.show(e.type == 'swipeLeft' ? 'next' : 'previous');
+                        }
+                    });
+                }
+
+                active = this;
+
+                this.modal.panel.find('[uk-transition-hide]').hide();
+                this.modal.panel.find('[uk-transition-show]').show();
+
+                this.modal.content && this.modal.content.remove();
+                this.modal.caption.text(this.getItem().title);
+
+                var event = $.Event('showitem');
+                this.$el.trigger(event);
+                if (!event.isImmediatePropagationStopped()) {
+                    this.setError(this.getItem());
+                }
+            },
+
+            hide: function hide() {
+                var this$1 = this;
+
+
+                active = active && active !== this && active;
+
+                this.modal.hide().then(function () {
+                    this$1.modal.$destroy(true);
+                    this$1.modal = null;
+                });
+            },
+
+            getItem: function getItem() {
+                return this.items[this.index] || {source: '', title: '', type: ''};
+            },
+
+            setItem: function setItem(item, content, width, height) {
+                if ( width === void 0 ) width = 200;
+                if ( height === void 0 ) height = 200;
+
+                extend(item, {content: content, width: width, height: height});
+                this.$update();
+            },
+
+            setError: function setError(item) {
+                this.setItem(item, '<div class="uk-position-cover uk-flex uk-flex-middle uk-flex-center"><strong>Loading resource failed!</strong></div>', 400, 300);
+            }
+
+        }
+
+    });
+
+    UIkit.mixin({
+
+        events: {
+
+            showitem: function showitem(e) {
+                var this$1 = this;
+
+
+                var item = this.getItem();
+
+                if (item.type !== 'image' && item.source && !item.source.match(/\.(jp(e)?g|png|gif|svg)$/i)) {
+                    return;
+                }
+
+                var img = new Image();
+
+                img.onerror = function () { return this$1.setError(item); };
+                img.onload = function () { return this$1.setItem(item, ("<img class=\"uk-responsive-width\" width=\"" + (img.width) + "\" height=\"" + (img.height) + "\" src =\"" + (item.source) + "\">"), img.width, img.height); };
+
+                img.src = item.source;
+
+                e.stopImmediatePropagation();
+            }
+
+        }
+
+    }, 'lightbox');
+
+    UIkit.mixin({
+
+        events: {
+
+            showitem: function showitem(e) {
+                var this$1 = this;
+
+
+                var item = this.getItem();
+
+                if (item.type !== 'video' && item.source && !item.source.match(/\.(mp4|webm|ogv)$/i)) {
+                    return;
+                }
+
+                var video = $('<video class="uk-responsive-width" controls></video>')
+                    .on('loadedmetadata', function () { return this$1.setItem(item, video.attr({width: video[0].videoWidth, height: video[0].videoHeight}), video[0].videoWidth, video[0].videoHeight); })
+                    .attr('src', item.source);
+
+                e.stopImmediatePropagation();
+            }
+
+        }
+
+    }, 'lightbox');
+
+    UIkit.mixin({
+
+        events: {
+
+            showitem: function showitem(e) {
+                var this$1 = this;
+
+
+                var item = this.getItem(), matches;
+
+                if (!(matches = item.source.match(/\/\/.*?youtube\.[a-z]+\/watch\?v=([^&]+)&?(.*)/)) && !(item.source.match(/youtu\.be\/(.*)/))) {
+                    return;
+                }
+
+                var id = matches[1],
+                    img = new Image(),
+                    lowres = false,
+                    setIframe = function (width, height) { return this$1.setItem(item, ("<iframe src=\"//www.youtube.com/embed/" + id + "\" width=\"" + width + "\" height=\"" + height + "\" style=\"max-width:100%;box-sizing:border-box;\"></iframe>"), width, height); };
+
+                img.onerror = function () { return setIframe(640, 320); };
+                img.onload = function () {
+                    //youtube default 404 thumb, fall back to lowres
+                    if (img.width === 120 && img.height === 90) {
+                        if (!lowres) {
+                            lowres = true;
+                            img.src = "//img.youtube.com/vi/" + id + "/0.jpg";
+                        } else {
+                            setIframe(640, 320);
+                        }
+                    } else {
+                        setIframe(img.width, img.height);
+                    }
+                };
+
+                img.src = "//img.youtube.com/vi/" + id + "/maxresdefault.jpg";
+
+                e.stopImmediatePropagation();
+            }
+
+        }
+
+    }, 'lightbox');
+
+    UIkit.mixin({
+
+        events: {
+
+            showitem: function showitem(e) {
+                var this$1 = this;
+
+
+                var item = this.getItem(), matches;
+
+                if (!(matches = item.source.match(/(\/\/.*?)vimeo\.[a-z]+\/([0-9]+).*?/))) {
+                    return;
+                }
+
+                var id = matches[2],
+                    setIframe = function (width, height) { return this$1.setItem(item, ("<iframe src=\"//player.vimeo.com/video/" + id + "\" width=\"" + width + "\" height=\"" + height + "\" style=\"max-width:100%;box-sizing:border-box;\"></iframe>"), width, height); };
+
+                $.ajax({type: 'GET', url: ("http://vimeo.com/api/oembed.json?url=" + (encodeURI(item.source))), jsonp: 'callback', dataType: 'jsonp'}).then(function (res) { return setIframe(res.width, res.height); });
+
+                e.stopImmediatePropagation();
+            }
+
+        }
+
+    }, 'lightbox');
+
+}
+
+function plugin$1(UIkit) {
+
+    if (plugin$1.installed) {
+        return;
+    }
+
+    var ref = UIkit.util;
+    var $ = ref.$;
+    var each = ref.each;
+    var pointerEnter = ref.pointerEnter;
+    var pointerLeave = ref.pointerLeave;
+    var Transition = ref.Transition;
+    var containers = {};
+
+    UIkit.component('notification', {
+
+        functional: true,
+
+        args: ['message', 'status'],
+
+        defaults: {
+            message: '',
+            status: '',
+            timeout: 5000,
+            group: null,
+            pos: 'top-center',
+            onClose: null,
+            clsClose: 'uk-notification-close'
+        },
+
+        created: function created() {
+
+            if (!containers[this.pos]) {
+                containers[this.pos] = $(("<div class=\"uk-notification uk-notification-" + (this.pos) + "\"></div>")).appendTo(UIkit.container);
+            }
+
+            this.$mount($(
+                ("<div class=\"uk-notification-message" + (this.status ? (" uk-notification-message-" + (this.status)) : '') + "\">\n                    <a href=\"#\" class=\"" + (this.clsClose) + "\" data-uk-close></a>\n                    <div>" + (this.message) + "</div>\n                </div>")
+            ).appendTo(containers[this.pos].show())[0]);
+
+        },
+
+        ready: function ready() {
+            var this$1 = this;
+
+
+            var marginBottom = parseInt(this.$el.css('margin-bottom'), 10);
+
+            Transition.start(
+                this.$el.css({opacity: 0, marginTop: -1 * this.$el.outerHeight(), marginBottom: 0}),
+                {opacity: 1, marginTop: 0, marginBottom: marginBottom}
+            ).then(function () {
+                if (this$1.timeout) {
+                    this$1.timer = setTimeout(this$1.close, this$1.timeout);
+                    this$1.$el
+                        .on(pointerEnter, function () { return clearTimeout(this$1.timer); })
+                        .on(pointerLeave, function () { return this$1.timer = setTimeout(this$1.close, this$1.timeout); });
+                }
+            });
+
+        },
+
+        events: {
+
+            click: function click(e) {
+                if ($(e.target).closest('a[href="#"]').length) {
+                    e.preventDefault();
+                }
+                this.close();
+            }
+
+        },
+
+        methods: {
+
+            close: function close(immediate) {
+                var this$1 = this;
+
+
+                var remove = function () {
+
+                    this$1.onClose && this$1.onClose();
+                    this$1.$el.trigger('close', [this$1]).remove();
+
+                    if (!containers[this$1.pos].children().length) {
+                        containers[this$1.pos].hide();
+                    }
+
+                };
+
+                if (this.timer) {
+                    clearTimeout(this.timer);
+                }
+
+                if (immediate) {
+                    remove();
+                } else {
+                    Transition.start(this.$el, {opacity: 0, marginTop: -1 * this.$el.outerHeight(), marginBottom: 0}).then(remove)
+                }
+            }
+
+        }
+
+    });
+
+    UIkit.notification.closeAll = function (group, immediate) {
+        each(UIkit.instances, function (_, component) {
+            if (component.$options.name === 'notification' && (!group || group === component.group)) {
+                component.close(immediate);
+            }
+        })
+    };
+
+}
+
+function plugin$2(UIkit) {
+
+    if (plugin$2.installed) {
+        return;
+    }
+
+    var mixin = UIkit.mixin;
+    var util = UIkit.util;
+    var $ = util.$;
+    var doc = util.docElement;
+    var extend = util.extend;
+    var getDimensions = util.getDimensions;
+    var isWithin = util.isWithin;
+    var on = util.on;
+    var off = util.off;
+    var offsetTop = util.offsetTop;
+    var pointerDown = util.pointerDown;
+    var pointerMove = util.pointerMove;
+    var pointerUp = util.pointerUp;
+    var promise = util.promise;
+    var win = util.win;
+
+    UIkit.component('sortable', {
+
+        mixins: [mixin.class],
+
+        props: {
+            group: String,
+            animation: Number,
+            threshold: Number,
+            clsItem: String,
+            clsPlaceholder: String,
+            clsDrag: String,
+            clsDragState: String,
+            clsBase: String,
+            clsNoDrag: String,
+            clsEmpty: String,
+            clsCustom: String,
+            handle: String
+        },
+
+        defaults: {
+            group: false,
+            animation: 150,
+            threshold: 5,
+            clsItem: 'uk-sortable-item',
+            clsPlaceholder: 'uk-sortable-placeholder',
+            clsDrag: 'uk-sortable-drag',
+            clsDragState: 'uk-drag',
+            clsBase: 'uk-sortable',
+            clsNoDrag: 'uk-sortable-nodrag',
+            clsEmpty: 'uk-sortable-empty',
+            clsCustom: '',
+            handle: false
+        },
+
+        init: function init() {
+            var this$1 = this;
+
+            ['init', 'start', 'move', 'end'].forEach(function (key) {
+                var fn = this$1[key];
+                this$1[key] = function (e) {
+                    e = e.originalEvent || e;
+                    this$1.scrollY = window.scrollY;
+                    var ref = e.touches && e.touches[0] || e;
+                    var pageX = ref.pageX;
+                    var pageY = ref.pageY;
+                    this$1.pos = {x: pageX, y: pageY};
+
+                    fn(e);
+                }
+            });
+        },
+
+        events: ( obj = {}, obj[pointerDown] = 'init', obj ),
+
+        update: {
+
+            write: function write() {
+                var this$1 = this;
+
+
+                if (this.clsEmpty) {
+                    this.$el.toggleClass(this.clsEmpty, !this.$el.children().length);
+                }
+
+                if (!this.drag) {
+                    return;
+                }
+
+                this.drag.offset({top: this.pos.y + this.origin.top, left: this.pos.x + this.origin.left});
+
+                var top = offsetTop(this.drag), bottom = top + this.drag[0].offsetHeight;
+
+                if (top > 0 && top < this.scrollY) {
+                    setTimeout(function () { return win.scrollTop(this$1.scrollY - 5); }, 5);
+                } else if (bottom < doc[0].offsetHeight && bottom > window.innerHeight + this.scrollY) {
+                    setTimeout(function () { return win.scrollTop(this$1.scrollY + 5); }, 5);
+                }
+
+            }
+
+        },
+
+        methods: {
+
+            init: function init(e) {
+
+                var target = $(e.target), placeholder = this.$el.children().filter(function (i, el) { return isWithin(e.target, el); });
+
+                if (!placeholder.length
+                    || target.is(':input')
+                    || this.handle && !isWithin(target, this.handle)
+                    || e.button && e.button !== 0
+                    || isWithin(target, ("." + (this.clsNoDrag)))
+                ) {
+                    return;
+                }
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                this.touched = [this];
+                this.placeholder = placeholder;
+                this.origin = extend({target: target, index: this.placeholder.index()}, this.pos);
+
+                doc.on(pointerMove, this.move);
+                doc.on(pointerUp, this.end);
+                win.on('scroll', this.scroll);
+
+                if (!this.threshold) {
+                    this.start(e);
+                }
+
+            },
+
+            start: function start(e) {
+
+                this.drag = $(this.placeholder[0].outerHTML.replace(/^<li/i, '<div').replace(/li>$/i, 'div>'))
+                    .attr('uk-no-boot', '')
+                    .addClass(((this.clsDrag) + " " + (this.clsCustom)))
+                    .css({
+                        boxSizing: 'border-box',
+                        width: this.placeholder.outerWidth(),
+                        height: this.placeholder.outerHeight()
+                    })
+                    .css(this.placeholder.css(['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom']))
+                    .appendTo(UIkit.container);
+
+                this.drag.children().first().height(this.placeholder.children().height());
+
+                var ref = getDimensions(this.placeholder);
+                var left = ref.left;
+                var top = ref.top;
+                extend(this.origin, {left: left - this.pos.x, top: top - this.pos.y});
+
+                this.placeholder.addClass(this.clsPlaceholder);
+                this.$el.children().addClass(this.clsItem);
+                doc.addClass(this.clsDragState);
+
+                this.$el.trigger('start', [this, this.placeholder, this.drag]);
+
+                this.move(e);
+            },
+
+            move: function move(e) {
+
+                if (!this.drag) {
+
+                    if (Math.abs(this.pos.x - this.origin.x) > this.threshold || Math.abs(this.pos.y - this.origin.y) > this.threshold) {
+                        this.start(e);
+                    }
+
+                    return;
+                }
+
+                this.$emit();
+
+                var target = e.type === 'mousemove' ? e.target : document.elementFromPoint(this.pos.x - document.body.scrollLeft, this.pos.y - document.body.scrollTop),
+                    sortable = getSortable(target),
+                    previous = getSortable(this.placeholder[0]),
+                    move = sortable !== previous;
+
+                if (!sortable || isWithin(target, this.placeholder) || move && (!sortable.group || sortable.group !== previous.group)) {
+                    return;
+                }
+
+                target = sortable.$el.is(target.parentNode) && $(target) || sortable.$el.children().has(target);
+
+                if (move) {
+                    previous.remove(this.placeholder);
+                } else if (!target.length) {
+                    return;
+                }
+
+                sortable.insert(this.placeholder, target);
+
+                if (!~this.touched.indexOf(sortable)) {
+                    this.touched.push(sortable);
+                }
+
+            },
+
+            scroll: function scroll() {
+                var scroll = window.scrollY;
+                if (scroll !== this.scrollY) {
+                    this.pos.y += scroll - this.scrollY;
+                    this.scrollY = scroll;
+                    this.$emit();
+                }
+            },
+
+            end: function end(e) {
+
+                doc.off(pointerMove, this.move);
+                doc.off(pointerUp, this.end);
+                win.off('scroll', this.scroll);
+
+                if (!this.drag) {
+
+                    if (e.type !== 'mouseup' && isWithin(e.target, 'a[href]')) {
+                        location.href = $(e.target).closest('a[href]').attr('href');
+                    }
+
+                    return;
+                }
+
+                preventClick();
+
+                var sortable = getSortable(this.placeholder[0]);
+
+                if (this === sortable) {
+                    if (this.origin.index !== this.placeholder.index()) {
+                        this.$el.trigger('change', [this, this.placeholder, 'moved']);
+                    }
+                } else {
+                    sortable.$el.trigger('change', [sortable, this.placeholder, 'added']);
+                    this.$el.trigger('change', [this, this.placeholder, 'removed']);
+                }
+
+                this.$el.trigger('stop', [this]);
+
+                this.drag.remove();
+                this.drag = null;
+
+                this.touched.forEach(function (sortable) { return sortable.$el.children().removeClass(((sortable.clsPlaceholder) + " " + (sortable.clsItem))); });
+
+                doc.removeClass(this.clsDragState);
+
+            },
+
+            insert: function insert(element, target) {
+                var this$1 = this;
+
+
+                this.$el.children().addClass(this.clsItem);
+
+                var insert = function () {
+
+                    if (target.length) {
+
+                        if (!this$1.$el.has(element).length || element.prevAll().filter(target).length) {
+                            element.insertBefore(target);
+                        } else {
+                            element.insertAfter(target);
+                        }
+
+                    } else {
+                        this$1.$el.append(element);
+                    }
+
+                };
+
+                if (this.animation) {
+                    this.animate(insert);
+                } else {
+                    insert();
+                }
+
+            },
+
+            remove: function remove(element) {
+
+                if (!this.$el.has(element).length) {
+                    return;
+                }
+
+                if (this.animation) {
+                    this.animate(function () { return element.detach(); });
+                } else {
+                    element.detach();
+                }
+
+            },
+
+            animate: function animate(action) {
+                var this$1 = this;
+
+
+                var props = [],
+                    children = this.$el.children().toArray().map(function (el) {
+                        el = $(el);
+                        props.push(extend({
+                            position: 'absolute',
+                            pointerEvents: 'none',
+                            width: el.outerWidth(),
+                            height: el.outerHeight()
+                        }, el.position()));
+                        return el;
+                    }),
+                    reset = {position: '', width: '', height: '', pointerEvents: '', top: '', left: ''};
+
+                action();
+
+                children.forEach(function (el) { return el.stop(); });
+                this.$el.children().css(reset);
+                this.$updateSync('update', true);
+
+                this.$el.css('min-height', this.$el.height());
+
+                var positions = children.map(function (el) { return el.position(); });
+                promise.all(children.map(function (el, i) { return el.css(props[i]).animate(positions[i], this$1.animation).promise(); }))
+                    .then(function () {
+                        this$1.$el.css('min-height', '').children().css(reset);
+                        this$1.$updateSync('update', true);
+                    });
+
+            }
+
+        }
+
+    });
+    var obj;
+
+    function getSortable(element) {
+        return UIkit.getComponent(element, 'sortable') || element.parentNode && getSortable(element.parentNode);
+    }
+
+    function preventClick() {
+        var timer = setTimeout(function () { return doc.trigger('click'); }, 0),
+            listener = function (e) {
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                clearTimeout(timer);
+                off(doc, 'click', listener, true);
+            };
+
+        on(doc, 'click', listener, true);
+    }
+
+}
+
+function plugin$3(UIkit) {
+
+    if (plugin$3.installed) {
+        return;
+    }
+
+    var util = UIkit.util;
+    var mixin = UIkit.mixin;
+    var $ = util.$;
+    var doc = util.doc;
+    var fastdom = util.fastdom;
+    var flipPosition = util.flipPosition;
+    var isTouch = util.isTouch;
+    var isWithin = util.isWithin;
+    var pointerDown = util.pointerDown;
+    var pointerEnter = util.pointerEnter;
+    var pointerLeave = util.pointerLeave;
+    var toJQuery = util.toJQuery;
+
+    var active;
+
+    doc.on('click', function (e) {
+        if (active && !isWithin(e.target, active.$el)) {
+            active.hide();
+        }
+    });
+
+    UIkit.component('tooltip', {
+
+        attrs: true,
+
+        mixins: [mixin.toggable, mixin.position],
+
+        props: {
+            delay: Number,
+            container: Boolean,
+            title: String
+        },
+
+        defaults: {
+            pos: 'top',
+            title: '',
+            delay: 0,
+            animation: ['uk-animation-scale-up'],
+            duration: 100,
+            cls: 'uk-active',
+            clsPos: 'uk-tooltip',
+            container: true,
+        },
+
+        init: function init() {
+            this.container = this.container === true && UIkit.container || this.container && toJQuery(this.container);
+        },
+
+        connected: function connected() {
+            var this$1 = this;
+
+            fastdom.mutate(function () { return this$1.$el.removeAttr('title').attr('aria-expanded', false); });
+        },
+
+        disconnected: function disconnected() {
+            this.hide();
+        },
+
+        methods: {
+
+            show: function show() {
+                var this$1 = this;
+
+
+                if (active === this) {
+                    return;
+                }
+
+                if (active) {
+                    active.hide();
+                }
+
+                active = this;
+
+                clearTimeout(this.showTimer);
+
+                this.tooltip = $(("<div class=\"" + (this.clsPos) + "\" aria-hidden=\"true\"><div class=\"" + (this.clsPos) + "-inner\">" + (this.title) + "</div></div>")).appendTo(this.container);
+
+                this.$el.attr('aria-expanded', true);
+
+                this.positionAt(this.tooltip, this.$el);
+                this.origin = this.getAxis() === 'y' ? ((flipPosition(this.dir)) + "-" + (this.align)) : ((this.align) + "-" + (flipPosition(this.dir)));
+
+                this.showTimer = setTimeout(function () {
+                    this$1.toggleElement(this$1.tooltip, true);
+
+                    this$1.hideTimer = setInterval(function () {
+                        if (!this$1.$el.is(':visible')) {
+                            this$1.hide();
+                        }
+                    }, 150);
+
+                }, this.delay);
+            },
+
+            hide: function hide() {
+
+                if (this.$el.is('input') && this.$el[0] === document.activeElement) {
+                    return;
+                }
+
+                active = active !== this && active || false;
+
+                clearTimeout(this.showTimer);
+                clearInterval(this.hideTimer);
+                this.$el.attr('aria-expanded', false);
+                this.toggleElement(this.tooltip, false);
+                this.tooltip && this.tooltip.remove();
+                this.tooltip = false;
+            }
+
+        },
+
+        events: ( obj = {
+            'blur': 'hide'
+        }, obj[("focus " + pointerEnter + " " + pointerDown)] = function (e) {
+                if (e.type !== pointerDown || !isTouch(e)) {
+                    this.show();
+                }
+            }, obj[pointerLeave] = function (e) {
+                if (!isTouch(e)) {
+                    this.hide()
+                }
+            }, obj )
+
+    });
+    var obj;
+
+}
+
+function plugin$4(UIkit) {
+
+    if (plugin$4.installed) {
+        return;
+    }
+
+    var ref = UIkit.util;
+    var $ = ref.$;
+    var ajax = ref.ajax;
+    var on = ref.on;
+
+    UIkit.component('upload', {
+
+        props: {
+            allow: String,
+            clsDragover: String,
+            concurrent: Number,
+            dataType: String,
+            mime: String,
+            msgInvalidMime: String,
+            msgInvalidName: String,
+            multiple: Boolean,
+            name: String,
+            params: Object,
+            type: String,
+            url: String
+        },
+
+        defaults: {
+            allow: false,
+            clsDragover: 'uk-dragover',
+            concurrent: 1,
+            dataType: undefined,
+            mime: false,
+            msgInvalidMime: 'Invalid File Type: %s',
+            msgInvalidName: 'Invalid File Name: %s',
+            multiple: false,
+            name: 'files[]',
+            params: {},
+            type: 'POST',
+            url: '',
+            abort: null,
+            beforeAll: null,
+            beforeSend: null,
+            complete: null,
+            completeAll: null,
+            error: null,
+            fail: function fail(msg) {
+                alert(msg);
+            },
+            load: null,
+            loadEnd: null,
+            loadStart: null,
+            progress: null
+        },
+
+        events: {
+
+            change: function change(e) {
+
+                if (!$(e.target).is('input[type="file"]')) {
+                    return;
+                }
+
+                e.preventDefault();
+
+                if (e.target.files) {
+                    this.upload(e.target.files);
+                }
+
+                e.target.value = '';
+            },
+
+            drop: function drop(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                var transfer = e.originalEvent.dataTransfer;
+
+                if (!transfer || !transfer.files) {
+                    return;
+                }
+
+                this.$el.removeClass(this.clsDragover);
+
+                this.upload(transfer.files);
+            },
+
+            dragenter: function dragenter(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            },
+
+            dragover: function dragover(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.$el.addClass(this.clsDragover);
+            },
+
+            dragleave: function dragleave(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.$el.removeClass(this.clsDragover);
+            }
+
+        },
+
+        methods: {
+
+            upload: function upload(files) {
+                var this$1 = this;
+
+
+                if (!files.length) {
+                    return;
+                }
+
+                this.$el.trigger('upload', [files]);
+
+                for (var i = 0; i < files.length; i++) {
+
+                    if (this$1.allow) {
+                        if (!match(this$1.allow, files[i].name)) {
+                            this$1.fail(this$1.msgInvalidName.replace(/%s/, this$1.allow));
+                            return;
+                        }
+                    }
+
+                    if (this$1.mime) {
+                        if (!match(this$1.mime, files[i].type)) {
+                            this$1.fail(this$1.msgInvalidMime.replace(/%s/, this$1.mime));
+                            return;
+                        }
+                    }
+
+                }
+
+                if (!this.multiple) {
+                    files = [files[0]];
+                }
+
+                this.beforeAll && this.beforeAll(this, files);
+
+                var chunks = chunk(files, this.concurrent),
+                    upload = function (files) {
+
+                        var data = new FormData();
+
+                        files.forEach(function (file) { return data.append(this$1.name, file); });
+
+                        for (var key in this$1.params) {
+                            data.append(key, this$1.params[key]);
+                        }
+
+                        ajax({
+                            data: data,
+                            url: this$1.url,
+                            type: this$1.type,
+                            dataType: this$1.dataType,
+                            beforeSend: this$1.beforeSend,
+                            complete: [this$1.complete, function (xhr, status) {
+                                if (chunks.length) {
+                                    upload(chunks.shift());
+                                } else {
+                                    this$1.completeAll && this$1.completeAll(xhr);
+                                }
+
+                                if (status === 'abort') {
+                                    this$1.abort && this$1.abort(xhr);
+                                }
+                            }],
+                            cache: false,
+                            contentType: false,
+                            processData: false,
+                            xhr: function () {
+                                var xhr = $.ajaxSettings.xhr();
+                                xhr.upload && this$1.progress && on(xhr.upload, 'progress', this$1.progress);
+                                ['loadStart', 'load', 'loadEnd', 'error', 'abort'].forEach(function (type) { return this$1[type] && on(xhr, type.toLowerCase(), this$1[type]); });
+                                return xhr;
+                            }
+                        })
+
+                    };
+
+                upload(chunks.shift());
+
+            }
+
+        }
+
+    });
+
+    function match(pattern, path) {
+        return path.match(new RegExp(("^" + (pattern.replace(/\//g, '\\/').replace(/\*\*/g, '(\\/[^\\/]+)*').replace(/\*/g, '[^\\/]+').replace(/((?!\\))\?/g, '$1.')) + "$"), 'i'));
+    }
+
+    function chunk(files, size) {
+        var chunks = [];
+        for (var i = 0; i < files.length; i += size) {
+            var chunk = [];
+            for (var j = 0; j < size; j++) {
+                chunk.push(files[i+j]);
+            }
+            chunks.push(chunk);
+        }
+        return chunks;
+    }
+
+}
+
+UIkit.use(plugin);
+UIkit.use(plugin$1);
+UIkit.use(plugin$2);
+UIkit.use(plugin$3);
+UIkit.use(plugin$4);
+
 return UIkit;
 
 })));
